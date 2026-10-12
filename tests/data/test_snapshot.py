@@ -189,4 +189,6 @@ def test_market_data_open_is_optional() -> None:
     without_open = MarketData(close=close, dataset_hash="0" * 64, calendar=CALENDAR)
     assert without_open.open is None
     with_open = MarketData(close=close, dataset_hash="0" * 64, calendar=CALENDAR, open=close)
-    assert with_open.open is close
+    assert with_open.open is not None
+    pd.testing.assert_frame_equal(with_open.open, close)
+    assert with_open.open is not close
