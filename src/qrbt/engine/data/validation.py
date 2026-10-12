@@ -7,11 +7,11 @@ class ValidationWarning:
     """Frozen. A non-fatal finding, e.g. an extreme daily return."""
 
     code: str
-    date: pd.Timestamp
+    date: str  # "YYYY-MM-DD"
     ticker: str
     value: float
 
-    def __init__(self, code: str, date: pd.Timestamp, ticker: str, value: float) -> None:
+    def __init__(self, code: str, date: str, ticker: str, value: float) -> None:
         raise NotImplementedError
 
 
@@ -20,16 +20,16 @@ class ValidationReport:
 
     n_rows: int
     tickers: tuple[str, ...]
-    start: pd.Timestamp
-    end: pd.Timestamp
+    start: str  # "YYYY-MM-DD"
+    end: str  # "YYYY-MM-DD"
     warnings: tuple[ValidationWarning, ...]
 
     def __init__(
         self,
         n_rows: int,
         tickers: tuple[str, ...],
-        start: pd.Timestamp,
-        end: pd.Timestamp,
+        start: str,
+        end: str,
         warnings: tuple[ValidationWarning, ...],
     ) -> None:
         raise NotImplementedError

@@ -31,8 +31,8 @@ def test_clean_data_passes_without_warnings() -> None:
     report = validate_prices(clean_close())
     assert report.n_rows == 5
     assert list(report.tickers) == ["AAA", "BBB"]
-    assert report.start == pd.Timestamp("2024-01-02")
-    assert report.end == pd.Timestamp("2024-01-08")
+    assert report.start == "2024-01-02"
+    assert report.end == "2024-01-08"
     assert list(report.warnings) == []
 
 
@@ -93,9 +93,42 @@ def test_daily_jump_above_threshold_is_warning_not_error() -> None:
     assert len(report.warnings) == 1
     warning = report.warnings[0]
     assert warning.code == "extreme_return"
-    assert warning.date == pd.Timestamp("2024-01-04")
+    assert warning.date == "2024-01-04"
     assert warning.ticker == "AAA"
     assert warning.value == pytest.approx(160.0 / 101.0 - 1.0)
+
+
+def test_daily_drop_above_threshold_warns_with_negative_value() -> None:
+    close = make_close(
+        {
+            "AAA": [100.0, 101.0, 40.4, 41.0, 41.5],  # 40.4 / 101.0 - 1 = -0.6
+            "BBB": [50.0, 50.5, 49.8, 50.2, 51.0],
+        }
+    )
+    report = validate_prices(close)
+    assert len(report.warnings) == 1
+    warning = report.warnings[0]
+    assert warning.code == "extreme_return"
+    assert warning.date == "2024-01-04"
+    assert warning.ticker == "AAA"
+    assert warning.value == pytest.approx(-0.6)
+    assert warning.value < 0
+
+
+def test_return_exactly_at_threshold_is_not_warning() -> None:
+    # 100 -> 150 is exactly +0.5 in float64; the threshold is strict (> max_abs_return).
+    close = make_close({"AAA": [100.0, 150.0, 151.0, 152.0, 153.0]})
+    assert 150.0 / 100.0 - 1.0 == 0.5
+    report = validate_prices(close, max_abs_return=0.5)
+    assert list(report.warnings) == []
+
+
+@pytest.mark.parametrize("bad", [np.inf, -np.inf])
+def test_infinite_price_raises(bad: float) -> None:
+    close = clean_close()
+    close.iloc[2, 0] = bad
+    with pytest.raises(DataValidationError):
+        validate_prices(close)
 
 
 def test_does_not_modify_input() -> None:

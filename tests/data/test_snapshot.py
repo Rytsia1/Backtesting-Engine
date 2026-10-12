@@ -1,9 +1,10 @@
 import hashlib
 import json
+import os
 from dataclasses import FrozenInstanceError
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Literal
+from typing import Literal, NoReturn
 
 import numpy as np
 import pandas as pd
@@ -94,18 +95,53 @@ def test_writing_same_data_twice_is_idempotent(tmp_path: Path) -> None:
 
 def test_existing_target_with_wrong_hash_raises(tmp_path: Path) -> None:
     ref = write_snapshot(tmp_path, clean_close(), source=SOURCE, calendar=CALENDAR)
-    flip_one_byte(ref.parquet_path)
-    with pytest.raises(DataValidationError):
-        write_snapshot(tmp_path, clean_close(), source=SOURCE, calendar=CALENDAR)
-
-
-def test_failed_write_leaves_no_temp_files_and_never_overwrites(tmp_path: Path) -> None:
-    ref = write_snapshot(tmp_path, clean_close(), source=SOURCE, calendar=CALENDAR)
     corrupted = flip_one_byte(ref.parquet_path)
     with pytest.raises(DataValidationError):
         write_snapshot(tmp_path, clean_close(), source=SOURCE, calendar=CALENDAR)
     assert files_in(tmp_path) == {ref.parquet_path.name, ref.manifest_path.name}
     assert ref.parquet_path.read_bytes() == corrupted
+
+
+def test_failed_rename_leaves_no_temp_files(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    renamed_from: list[Path] = []
+
+    def failing_replace(src: object, dst: object) -> NoReturn:
+        # Fails after the temp file is on disk, i.e. at the final atomic rename.
+        renamed_from.append(Path(str(src)))
+        assert renamed_from[-1].is_file()
+        raise OSError("injected failure in os.replace")
+
+    monkeypatch.setattr(os, "replace", failing_replace)
+    with pytest.raises(OSError, match="injected failure"):
+        write_snapshot(tmp_path, clean_close(), source=SOURCE, calendar=CALENDAR)
+    assert renamed_from, "write_snapshot never reached os.replace"
+    assert files_in(tmp_path) == set()
+
+
+def test_missing_manifest_is_rewritten_without_touching_parquet(tmp_path: Path) -> None:
+    ref = write_snapshot(tmp_path, clean_close(), source=SOURCE, calendar=CALENDAR)
+    parquet_bytes = ref.parquet_path.read_bytes()
+    parquet_mtime = ref.parquet_path.stat().st_mtime_ns
+    ref.manifest_path.unlink()
+    again = write_snapshot(tmp_path, clean_close(), source=SOURCE, calendar=CALENDAR)
+    assert again.sha256 == ref.sha256
+    assert files_in(tmp_path) == {ref.parquet_path.name, ref.manifest_path.name}
+    manifest = json.loads(ref.manifest_path.read_text(encoding="utf-8"))
+    assert manifest["tickers"] == ["AAA", "BBB"]
+    assert ref.parquet_path.read_bytes() == parquet_bytes
+    assert ref.parquet_path.stat().st_mtime_ns == parquet_mtime
+
+
+def test_injected_created_at_is_written_verbatim(tmp_path: Path) -> None:
+    created_at = datetime(2024, 1, 9, 17, 30, 5, 123456, tzinfo=UTC)
+    ref = write_snapshot(
+        tmp_path, clean_close(), source=SOURCE, calendar=CALENDAR, created_at=created_at
+    )
+    manifest = json.loads(ref.manifest_path.read_text(encoding="utf-8"))
+    assert manifest["created_at"] == "2024-01-09T17:30:05.123456+00:00"
+    assert datetime.fromisoformat(manifest["created_at"]) == created_at
 
 
 def test_invalid_data_cannot_be_written(tmp_path: Path) -> None:

@@ -1,3 +1,4 @@
+from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
@@ -16,7 +17,15 @@ class SnapshotRef:
         raise NotImplementedError
 
 
-def write_snapshot(root: Path, close: pd.DataFrame, *, source: str, calendar: str) -> SnapshotRef:
+def write_snapshot(
+    root: Path,
+    close: pd.DataFrame,
+    *,
+    source: str,
+    calendar: str,
+    created_at: datetime | None = None,
+) -> SnapshotRef:
+    """created_at=None reads datetime.now(UTC) here, at the I/O boundary only."""
     raise NotImplementedError
 
 

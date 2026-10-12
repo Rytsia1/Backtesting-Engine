@@ -159,7 +159,7 @@ Benchmark dijalankan sebagai backtest tersendiri lewat simulator yang sama, deng
 | Git commit | Disimpan di `RunInfo` sebagai metadata, tidak ikut di-hash. Bila ikut, setiap commit yang tidak menyentuh engine akan merusak idempotency |
 | Tampilan | UI menampilkan 12 karakter pertama; database menyimpan hash penuh |
 
-Determinisme dijaga dengan tiga aturan: tidak ada angka acak di v1 (bila nanti ada, misalnya bootstrap, seed wajib masuk konfigurasi), ticker selalu diurutkan alfabetis sehingga urutan penjumlahan tetap, dan engine tidak membaca waktu sistem.
+Determinisme dijaga dengan tiga aturan: tidak ada angka acak di v1 (bila nanti ada, misalnya bootstrap, seed wajib masuk konfigurasi), ticker selalu diurutkan alfabetis sehingga urutan penjumlahan tetap, dan perhitungan backtest (strategies, sim, metrics, validation) tidak membaca waktu sistem. Metadata ingestion dikecualikan: `write_snapshot` boleh mencatat `created_at` dengan membaca jam sistem di batas I/O bila nilainya tidak disuntikkan; nilai ini hanya ada di manifest dan tidak memengaruhi hash snapshot maupun hasil run.
 
 ## Error dan validasi
 
