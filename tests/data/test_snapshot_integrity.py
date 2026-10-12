@@ -2,6 +2,7 @@ import json
 import os
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 import pytest
@@ -172,3 +173,40 @@ def test_crash_before_manifest_leaves_an_unloadable_snapshot(
     ref = write_snapshot(tmp_path, clean_close(), source=SOURCE, calendar=CALENDAR)
     assert ref.sha256 == parquet.stem
     pd.testing.assert_frame_equal(load_snapshot(tmp_path, ref.sha256).close, clean_close())
+
+
+# --- review follow-up: no silent type conversion, parse exactly the verified bytes ---
+
+
+@pytest.mark.parametrize(
+    "values", [["1.0", "2.0", "3.0", "4.0", "5.0"], [True] * 5], ids=["str", "bool"]
+)
+def test_non_numeric_prices_are_rejected_not_converted(
+    tmp_path: Path, values: list[object]
+) -> None:
+    close = pd.DataFrame({"AAA": values}, index=pd.DatetimeIndex(DATES, name="date").as_unit("ns"))
+    with pytest.raises(DataValidationError):
+        write_snapshot(tmp_path, close, source=SOURCE, calendar=CALENDAR)
+    assert files_in(tmp_path) == set()
+
+
+def test_load_parses_exactly_the_bytes_it_verified(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    ref = write_snapshot(tmp_path, clean_close(), source=SOURCE, calendar=CALENDAR)
+    other_root = tmp_path / "other"
+    other_root.mkdir()
+    swapped = clean_close()
+    swapped.iloc[0, 0] = 99.0  # same tickers and dates, so the manifest would still match
+    swapped_bytes = write_snapshot(
+        other_root, swapped, source=SOURCE, calendar=CALENDAR
+    ).parquet_path.read_bytes()
+    real_read_parquet = pd.read_parquet
+
+    def swap_file_then_read(path: Any, *args: Any, **kwargs: Any) -> pd.DataFrame:
+        ref.parquet_path.write_bytes(swapped_bytes)  # the file changes after the hash check
+        return real_read_parquet(path, *args, **kwargs)
+
+    monkeypatch.setattr(pd, "read_parquet", swap_file_then_read)
+    md = load_snapshot(tmp_path, ref.sha256)
+    pd.testing.assert_frame_equal(md.close, clean_close())

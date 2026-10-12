@@ -81,3 +81,20 @@ def test_empty_frame_passes_through() -> None:
     result = normalize_yfinance_frame(yf_frame([], pd.DatetimeIndex([])))
     assert result.empty
     assert result.columns.tolist() == ["MSFT"]
+
+
+@pytest.mark.parametrize(
+    "values", [["400.0", "401.0", "402.0"], [True, True, True]], ids=["str", "bool"]
+)
+def test_non_numeric_close_is_rejected_not_converted(values: list[object]) -> None:
+    raw = pd.DataFrame({("Close", "MSFT"): values}, index=pd.DatetimeIndex(DATES))
+    raw.columns = raw.columns.set_names(["Price", "Ticker"])
+    with pytest.raises(DataValidationError):
+        normalize_yfinance_frame(raw)
+
+
+def test_non_datetime_index_is_rejected_not_parsed() -> None:
+    raw = pd.DataFrame({("Close", "MSFT"): [400.0, 401.0, 402.0]}, index=pd.Index(DATES))
+    raw.columns = raw.columns.set_names(["Price", "Ticker"])
+    with pytest.raises(DataValidationError):
+        normalize_yfinance_frame(raw)

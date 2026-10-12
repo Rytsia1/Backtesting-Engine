@@ -5,6 +5,7 @@ pandas versions, so the hash is reproducible for the versions pinned in uv.lock.
 """
 
 import hashlib
+import io
 import json
 import os
 import re
@@ -16,6 +17,7 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
+from pandas.api.types import is_bool_dtype, is_numeric_dtype
 
 from qrbt.engine.data.market import MarketData, _check_prices
 from qrbt.engine.data.validation import ValidationReport, validate_prices
@@ -37,7 +39,22 @@ class SnapshotRef:
 
 
 def _canonical(close: pd.DataFrame) -> pd.DataFrame:
-    """Sorted tickers, float64, tz-naive datetime64[ns] index named "date", no columns name."""
+    """Sorted tickers, float64, datetime64[ns] index named "date", no columns name.
+
+    Only lossless representation changes: a non-datetime index or a non-numeric/bool price
+    column is rejected, never parsed or converted. Timezones are kept, not stripped.
+    """
+    if not isinstance(close.index, pd.DatetimeIndex):
+        raise DataValidationError(
+            f"index must be a DatetimeIndex, got {type(close.index).__name__}"
+        )
+    not_numeric = [
+        str(c)
+        for c, dtype in close.dtypes.items()
+        if is_bool_dtype(dtype) or not is_numeric_dtype(dtype)
+    ]
+    if not_numeric:
+        raise DataValidationError(f"price columns must be numeric, not bool or text: {not_numeric}")
     out = close.sort_index(axis=1).astype(np.float64)
     out.index = pd.DatetimeIndex(out.index).as_unit("ns")
     return out.rename_axis(index="date", columns=None)
@@ -157,12 +174,14 @@ def load_snapshot(root: Path, sha256: str) -> MarketData:
     for path in (parquet_path, manifest_path):
         if not path.is_file():
             raise DataValidationError(f"snapshot file {path.name} is missing")
-    if _file_sha256(parquet_path) != sha256:
+    # Read once: the bytes that are hashed are exactly the bytes that are parsed.
+    data = parquet_path.read_bytes()
+    if hashlib.sha256(data).hexdigest() != sha256:
         raise DataValidationError(f"{parquet_path.name} content does not match its hash")
 
     manifest = _read_manifest(manifest_path)
     md = MarketData(
-        close=pd.read_parquet(parquet_path, engine="pyarrow"),
+        close=pd.read_parquet(io.BytesIO(data), engine="pyarrow"),
         dataset_hash=sha256,
         calendar=manifest["calendar"],
     )
