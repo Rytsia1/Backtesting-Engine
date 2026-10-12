@@ -161,6 +161,8 @@ Benchmark dijalankan sebagai backtest tersendiri lewat simulator yang sama, deng
 
 Determinisme dijaga dengan tiga aturan: tidak ada angka acak di v1 (bila nanti ada, misalnya bootstrap, seed wajib masuk konfigurasi), ticker selalu diurutkan alfabetis sehingga urutan penjumlahan tetap, dan perhitungan backtest (strategies, sim, metrics, validation) tidak membaca waktu sistem. Metadata ingestion dikecualikan: `write_snapshot` boleh mencatat `created_at` dengan membaca jam sistem di batas I/O bila nilainya tidak disuntikkan; nilai ini hanya ada di manifest dan tidak memengaruhi hash snapshot maupun hasil run.
 
+`dataset_hash` adalah SHA-256 dari byte file Parquet snapshot setelah dikanonikalkan (index `datetime64[ns]` tanpa timezone bernama `date`, ticker urut alfabetis, float64). Byte itu juga memuat versi pyarrow dan pandas penulisnya, sehingga data yang sama yang ditulis dengan versi library berbeda menghasilkan hash berbeda. Reproducibility hash dijaga oleh versi yang dikunci `uv.lock`; snapshot lama tetap bisa dimuat karena hash diverifikasi terhadap byte filenya sendiri.
+
 ## Error dan validasi
 
 Semua error turunan dari `EngineError` dan dilempar sedini mungkin, sebelum simulasi berjalan bila memungkinkan. Engine tidak pernah menangkap lalu mengabaikan error-nya sendiri. Pesan error menyertakan tanggal dan ticker yang bermasalah.
