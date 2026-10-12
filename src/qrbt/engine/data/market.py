@@ -44,8 +44,16 @@ class MarketData:
         _check_prices(close, "close")
         if open is not None:
             _check_prices(open, "open")
-            if not (open.index.equals(close.index) and open.columns.equals(close.columns)):
-                raise DataValidationError("open must have the same index and columns as close")
+            # equals() ignores axis names, so compare them explicitly.
+            if not (
+                open.index.equals(close.index)
+                and open.columns.equals(close.columns)
+                and open.index.name == close.index.name
+                and open.columns.name == close.columns.name
+            ):
+                raise DataValidationError(
+                    "open must have the same index and columns (values and names) as close"
+                )
         object.__setattr__(self, "_close", close.copy(deep=False))
         object.__setattr__(self, "dataset_hash", dataset_hash)
         object.__setattr__(self, "calendar", calendar)

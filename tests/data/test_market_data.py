@@ -117,6 +117,20 @@ def test_open_with_same_dates_but_other_resolution_is_rejected() -> None:
         MarketData(close=clean_close(), dataset_hash=HASH, calendar=CALENDAR, open=open_)
 
 
+def test_open_with_different_index_name_is_rejected() -> None:
+    open_ = clean_open()
+    open_.index.name = "Date"  # same dates, different name
+    with pytest.raises(DataValidationError):
+        MarketData(close=clean_close(), dataset_hash=HASH, calendar=CALENDAR, open=open_)
+
+
+def test_open_with_different_columns_name_is_rejected() -> None:
+    open_ = clean_open()
+    open_.columns.name = "Ticker"  # same tickers, different axis name
+    with pytest.raises(DataValidationError):
+        MarketData(close=clean_close(), dataset_hash=HASH, calendar=CALENDAR, open=open_)
+
+
 def test_open_failing_validate_prices_is_rejected() -> None:
     open_ = clean_open()
     open_.iloc[1, 1] = np.nan
