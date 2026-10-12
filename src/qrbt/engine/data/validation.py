@@ -1,10 +1,12 @@
+import math
+import numbers
 from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
 import pandas as pd
 
-from qrbt.engine.errors import DataValidationError
+from qrbt.engine.errors import ConfigError, DataValidationError
 
 EXTREME_RETURN = "extreme_return"
 
@@ -52,7 +54,16 @@ def validate_prices(close: pd.DataFrame, *, max_abs_return: float = 0.5) -> Vali
 
     Errors: empty frame, non-datetime or tz-aware index, duplicate or unsorted dates,
     NaN/inf, price <= 0. A daily return with abs(r) > max_abs_return is a warning, not an error.
+    Raises ConfigError unless max_abs_return is a finite real number > 0 (bool rejected).
     """
+    if (
+        isinstance(max_abs_return, bool)
+        or not isinstance(max_abs_return, numbers.Real)
+        or not math.isfinite(max_abs_return)
+        or max_abs_return <= 0
+    ):
+        raise ConfigError(f"max_abs_return must be a finite number > 0, got {max_abs_return!r}")
+
     if close.empty:
         raise DataValidationError("price frame is empty")
 

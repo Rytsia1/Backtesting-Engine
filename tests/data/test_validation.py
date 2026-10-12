@@ -1,14 +1,14 @@
 import builtins
 import os
 from pathlib import Path
-from typing import NoReturn
+from typing import Any, NoReturn, cast
 
 import numpy as np
 import pandas as pd
 import pytest
 
 from qrbt.engine.data import validate_prices
-from qrbt.engine.errors import DataValidationError
+from qrbt.engine.errors import ConfigError, DataValidationError
 
 DATES = ["2024-01-02", "2024-01-03", "2024-01-04", "2024-01-05", "2024-01-08"]
 
@@ -149,3 +149,33 @@ def test_does_not_touch_disk(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
         m.setattr(os, "open", forbidden)
         validate_prices(close)
     assert list(tmp_path.iterdir()) == []
+
+
+@pytest.mark.parametrize("threshold", [np.nan, np.inf, -np.inf])
+def test_non_finite_threshold_raises(threshold: float) -> None:
+    with pytest.raises(ConfigError):
+        validate_prices(clean_close(), max_abs_return=threshold)
+
+
+@pytest.mark.parametrize("threshold", [0, 0.0, -0.1, -1])
+def test_non_positive_threshold_raises(threshold: float) -> None:
+    with pytest.raises(ConfigError):
+        validate_prices(clean_close(), max_abs_return=threshold)
+
+
+@pytest.mark.parametrize("threshold", [True, False])
+def test_boolean_threshold_raises(threshold: bool) -> None:
+    with pytest.raises(ConfigError):
+        validate_prices(clean_close(), max_abs_return=threshold)
+
+
+@pytest.mark.parametrize("threshold", ["0.5", None])
+def test_non_numeric_threshold_raises(threshold: object) -> None:
+    with pytest.raises(ConfigError):
+        validate_prices(clean_close(), max_abs_return=cast(Any, threshold))
+
+
+@pytest.mark.parametrize("threshold", [1, 0.25, np.float64(0.5)])
+def test_positive_finite_threshold_is_accepted(threshold: float) -> None:
+    report = validate_prices(clean_close(), max_abs_return=threshold)
+    assert list(report.warnings) == []
